@@ -1,0 +1,37 @@
+'forge clean' running (wd: /workspaces/6-thunder-loan-audit)
+'forge config --json' running
+'forge build --build-info --skip */test/** */script/** --force' running (wd: /workspaces/6-thunder-loan-audit)
+INFO:Detectors:[93m
+ThunderLoan.getCalculatedFee(IERC20,uint256) (src/protocol/ThunderLoan.sol#249-259) performs a multiplication on the result of a division:
+	- valueOfBorrowedToken = (amount * getPriceInWeth(address(token))) / s_feePrecision (src/protocol/ThunderLoan.sol#253-256)
+	- fee = (valueOfBorrowedToken * s_flashLoanFee) / s_feePrecision (src/protocol/ThunderLoan.sol#258-259)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#divide-before-multiply[0m
+INFO:Detectors:[93m
+ThunderLoan.flashloan(address,IERC20,uint256,bytes) (src/protocol/ThunderLoan.sol#176-224) ignores return value by receiverAddress.functionCall(abi.encodeCall(IFlashLoanReceiver.executeOperation,(address(token),amount,fee,msg.sender,params))) (src/protocol/ThunderLoan.sol#206-214)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#unused-return[0m
+INFO:Detectors:[92m
+ThunderLoan.updateFlashLoanFee(uint256) (src/protocol/ThunderLoan.sol#259-262) should emit an event for: 
+	- s_flashLoanFee = newFee (src/protocol/ThunderLoan.sol#261-262) 
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#missing-events-arithmetic[0m
+INFO:Detectors:[92m
+Reentrancy in ThunderLoan.flashloan(address,IERC20,uint256,bytes) (src/protocol/ThunderLoan.sol#176-224):
+	External calls:
+	- assetToken.updateExchangeRate(fee) (src/protocol/ThunderLoan.sol#199-200)
+	State variables written after the call(s):
+	- s_currentlyFlashLoaning[token] = true (src/protocol/ThunderLoan.sol#203)
+Reentrancy in ThunderLoan.flashloan(address,IERC20,uint256,bytes) (src/protocol/ThunderLoan.sol#176-224):
+	External calls:
+	- assetToken.updateExchangeRate(fee) (src/protocol/ThunderLoan.sol#199-200)
+	- assetToken.transferUnderlyingTo(receiverAddress,amount) (src/protocol/ThunderLoan.sol#203-204)
+	- receiverAddress.functionCall(abi.encodeCall(IFlashLoanReceiver.executeOperation,(address(token),amount,fee,msg.sender,params))) (src/protocol/ThunderLoan.sol#206-214)
+	State variables written after the call(s):
+	- s_currentlyFlashLoaning[token] = false (src/protocol/ThunderLoan.sol#224)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-2[0m
+INFO:Detectors:[92m
+Reentrancy in ThunderLoan.flashloan(address,IERC20,uint256,bytes) (src/protocol/ThunderLoan.sol#176-224):
+	External calls:
+	- assetToken.updateExchangeRate(fee) (src/protocol/ThunderLoan.sol#199-200)
+	Event emitted after the call(s):
+	- FlashLoan(receiverAddress,token,amount,fee,params) (src/protocol/ThunderLoan.sol#202-203)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-3[0m
+INFO:Slither:. analyzed (26 contracts with 98 detectors), 6 result(s) found
