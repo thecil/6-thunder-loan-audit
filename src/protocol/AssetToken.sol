@@ -65,14 +65,17 @@ contract AssetToken is ERC20 {
         s_exchangeRate = STARTING_EXCHANGE_RATE;
     }
 
+    // @audit - info - missing zero address check
     function mint(address to, uint256 amount) external onlyThunderLoan {
         _mint(to, amount);
     }
 
+    // @audit - info - missing zero address check
     function burn(address account, uint256 amount) external onlyThunderLoan {
         _burn(account, amount);
     }
 
+    // @audit - info - missing zero address check
     function transferUnderlyingTo(address to, uint256 amount) external onlyThunderLoan {
         i_underlying.safeTransfer(to, amount);
     }
@@ -86,7 +89,8 @@ contract AssetToken is ERC20 {
         // newExchangeRate = oldExchangeRate * (totalSupply + fee) / totalSupply
         // newExchangeRate = 1 (4 + 0.5) / 4
         // newExchangeRate = 1.125
-        uint256 newExchangeRate = s_exchangeRate * (totalSupply() + fee) / totalSupply();
+        // @audit - gas - too many 's_exchangeRate' storage reads, store as a memory variable
+        uint256 newExchangeRate = (s_exchangeRate * (totalSupply() + fee)) / totalSupply();
 
         if (newExchangeRate <= s_exchangeRate) {
             revert AssetToken__ExhangeRateCanOnlyIncrease(s_exchangeRate, newExchangeRate);

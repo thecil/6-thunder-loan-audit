@@ -8,14 +8,17 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 contract OracleUpgradeable is Initializable {
     address private s_poolFactory;
 
+    // @audit - info - missing zero address check
     function __Oracle_init(address poolFactoryAddress) internal onlyInitializing {
         __Oracle_init_unchained(poolFactoryAddress);
     }
 
+    // @audit - info - missing zero address check
     function __Oracle_init_unchained(address poolFactoryAddress) internal onlyInitializing {
         s_poolFactory = poolFactoryAddress;
     }
 
+    // @audit - info - missing zero address check
     function getPriceInWeth(address token) public view returns (uint256) {
         address swapPoolOfToken = IPoolFactory(s_poolFactory).getPool(token);
         return ITSwapPool(swapPoolOfToken).getPriceOfOnePoolTokenInWeth();
