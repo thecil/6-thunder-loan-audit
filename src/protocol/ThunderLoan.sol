@@ -81,6 +81,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     error ThunderLoan__NotEnoughTokenBalance(uint256 startingBalance, uint256 amount);
     error ThunderLoan__CallerIsNotContract();
     error ThunderLoan__AlreadyAllowed();
+    // @audit - low - Unused Error
     error ThunderLoan__ExhangeRateCanOnlyIncrease();
     error ThunderLoan__NotCurrentlyFlashLoaning();
     error ThunderLoan__BadNewFee();
@@ -94,6 +95,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     mapping(IERC20 => AssetToken) public s_tokenToAssetToken;
 
     // The fee in WEI, it should have 18 decimals. Each flash loan takes a flat fee of the token price.
+    // @audit - info - should be constant or immutable
     uint256 private s_feePrecision;
     uint256 private s_flashLoanFee; // 0.3% ETH fee
 
@@ -137,6 +139,9 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    // @audit - info - param 'tswapAddress' should be renamed to 'poolFactoryAddress' to match the name of the
+    // OracleUpgradeable contract
+    // @audit - low - initializers can be front run
     function initialize(address tswapAddress) external initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
@@ -145,12 +150,14 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         s_flashLoanFee = 3e15; // 0.3% ETH fee
     }
 
+    // @audit - info - missing natspec
     function deposit(IERC20 token, uint256 amount) external revertIfZero(amount) revertIfNotAllowedToken(token) {
         AssetToken assetToken = s_tokenToAssetToken[token];
         uint256 exchangeRate = assetToken.getExchangeRate();
         uint256 mintAmount = (amount * assetToken.EXCHANGE_RATE_PRECISION()) / exchangeRate;
         emit Deposit(msg.sender, token, amount);
         assetToken.mint(msg.sender, mintAmount);
+        // @audit - high - updating the fee is not necessary, causing the redeem function to break
         uint256 calculatedFee = getCalculatedFee(token, amount);
         assetToken.updateExchangeRate(calculatedFee);
         token.safeTransferFrom(msg.sender, address(assetToken), amount);
@@ -178,6 +185,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         assetToken.transferUnderlyingTo(msg.sender, amountUnderlying);
     }
 
+    // @audit - info - missing natspec
     function flashloan(
         address receiverAddress,
         IERC20 token,
@@ -201,13 +209,17 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
 
         uint256 fee = getCalculatedFee(token, amount);
         // slither-disable-next-line reentrancy-vulnerabilities-2 reentrancy-vulnerabilities-3
+        // @audit - follow up reentrancy
         assetToken.updateExchangeRate(fee);
 
         emit FlashLoan(receiverAddress, token, amount, fee, params);
 
         s_currentlyFlashLoaning[token] = true;
         assetToken.transferUnderlyingTo(receiverAddress, amount);
+        // @audit - info - messed up slither disables
         // slither-disable-next-line unused-return reentrancy-vulnerabilities-2
+        // @audit - follow up reentrancy
+        // @audit - low - Unchecked Return
         receiverAddress.functionCall(
             abi.encodeCall(
                 IFlashLoanReceiver.executeOperation,
@@ -228,6 +240,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         s_currentlyFlashLoaning[token] = false;
     }
 
+    // @audit - info - marked public but is not used internally, consider marking it as external
     function repay(IERC20 token, uint256 amount) public {
         if (!s_currentlyFlashLoaning[token]) {
             revert ThunderLoan__NotCurrentlyFlashLoaning();
@@ -236,6 +249,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         token.safeTransferFrom(msg.sender, address(assetToken), amount);
     }
 
+    // @audit - info - missing natspec
     function setAllowedToken(IERC20 token, bool allowed) external onlyOwner returns (AssetToken) {
         if (allowed) {
             if (address(s_tokenToAssetToken[token]) != address(0)) {
@@ -255,8 +269,10 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         }
     }
 
+    // @audit - info - missing natspec
     function getCalculatedFee(IERC20 token, uint256 amount) public view returns (uint256 fee) {
         //slither-disable-next-line divide-before-multiply
+        // @audit - high - if the fee is going to be in the token, then the value should reflect that
         uint256 valueOfBorrowedToken = (amount * getPriceInWeth(address(token))) / s_feePrecision;
         //slither-disable-next-line divide-before-multiply
         fee = (valueOfBorrowedToken * s_flashLoanFee) / s_feePrecision;
@@ -266,6 +282,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         if (newFee > s_feePrecision) {
             revert ThunderLoan__BadNewFee();
         }
+        // @audit - low - must emit an event for this change
         s_flashLoanFee = newFee;
     }
 
@@ -273,10 +290,12 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         return address(s_tokenToAssetToken[token]) != address(0);
     }
 
+    // @audit - info - marked public but is not used internally, consider marking it as external
     function getAssetFromToken(IERC20 token) public view returns (AssetToken) {
         return s_tokenToAssetToken[token];
     }
 
+    // @audit - info - marked public but is not used internally, consider marking it as external
     function isCurrentlyFlashLoaning(IERC20 token) public view returns (bool) {
         return s_currentlyFlashLoaning[token];
     }
@@ -289,5 +308,6 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         return s_feePrecision;
     }
 
+    // @audit - low - empty block
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
 }

@@ -77,6 +77,7 @@ contract AssetToken is ERC20 {
 
     // @audit - info - missing zero address check
     function transferUnderlyingTo(address to, uint256 amount) external onlyThunderLoan {
+        // @audit - medium - If USDC denylist the contract, this will break the protocol.
         i_underlying.safeTransfer(to, amount);
     }
 
