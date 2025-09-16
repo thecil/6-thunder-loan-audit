@@ -91,6 +91,23 @@ Place the following into `TunderLoanTest.t.sol` and execute the unit test.
     }
 ```
 
+### [H-2] - All the funds can be stolen if the flash loan is returned using deposit()
+
+**Description**: An attacker can acquire a flash loan and deposit funds directly into the contract using the deposit(), enabling stealing all the funds.
+
+**Impact**: The flashloan() performs a crucial balance check to ensure that the ending balance, after the flash loan, exceeds the initial balance, accounting for any borrower fees. This verification is achieved by comparing endingBalance with startingBalance + fee. However, a vulnerability emerges when calculating endingBalance using token.balanceOf(address(assetToken)).
+
+Exploiting this vulnerability, an attacker can return the flash loan using the deposit() instead of repay(). This action allows the attacker to mint AssetToken and subsequently redeem it using redeem(). What makes this possible is the apparent increase in the Asset contract's balance, even though it resulted from the use of the incorrect function. Consequently, the flash loan doesn't trigger a revert.
+
+**Proof of Concept**: 
+
+Check the unit test `ThunderLoanTest::test_useDepositInstedOfRepayToStealFunds` as proof of code for this bug. 
+
+**Recommended Mitigation**: Add a check in deposit() to make it impossible to use it in the same block of the flash loan. For example registring the block.number in a variable in flashloan() and checking it in deposit().
+
+
+
+
 ## MEDIUM
 
 ### [M-2] - Using TSwap as price oracle leads to price and oracle manipulation attacks 

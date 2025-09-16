@@ -186,6 +186,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     }
 
     // @audit - info - missing natspec
+    // audit - high - All the funds can be stolen if the flash loan is returned using deposit()
     function flashloan(
         address receiverAddress,
         IERC20 token,

