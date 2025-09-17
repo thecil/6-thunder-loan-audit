@@ -81,7 +81,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     error ThunderLoan__NotEnoughTokenBalance(uint256 startingBalance, uint256 amount);
     error ThunderLoan__CallerIsNotContract();
     error ThunderLoan__AlreadyAllowed();
-    // @audit - low - Unused Error
+    // @audit - [L-1] - Unused Errors
     error ThunderLoan__ExhangeRateCanOnlyIncrease();
     error ThunderLoan__NotCurrentlyFlashLoaning();
     error ThunderLoan__BadNewFee();
@@ -95,7 +95,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     mapping(IERC20 => AssetToken) public s_tokenToAssetToken;
 
     // The fee in WEI, it should have 18 decimals. Each flash loan takes a flat fee of the token price.
-    // @audit - info - should be constant or immutable
+    // @audit - [G-1] - `ThunderLoan::s_feePrecision` can be declared as constant or immutable
     uint256 private s_feePrecision;
     uint256 private s_flashLoanFee; // 0.3% ETH fee
 
@@ -139,9 +139,9 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    // @audit - info - param 'tswapAddress' should be renamed to 'poolFactoryAddress' to match the name of the
-    // OracleUpgradeable contract
-    // @audit - low - initializers can be front run
+    // @audit - [I-1] - `ThunderLoan::initialize` function parameter `tswapAddress` should be renamed to
+    // `poolFactoryAddress` to match the name of the `OracleUpgradeable` contract.
+    // @audit - [L-2] - Initializer Can Be Front-Run to Gain Control of the Program
     function initialize(address tswapAddress) external initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
@@ -150,7 +150,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         s_flashLoanFee = 3e15; // 0.3% ETH fee
     }
 
-    // @audit - info - missing natspec
+    // @audit - [L-3] - Missing NatSpec Comments
     function deposit(IERC20 token, uint256 amount) external revertIfZero(amount) revertIfNotAllowedToken(token) {
         AssetToken assetToken = s_tokenToAssetToken[token];
         uint256 exchangeRate = assetToken.getExchangeRate();
@@ -185,8 +185,8 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         assetToken.transferUnderlyingTo(msg.sender, amountUnderlying);
     }
 
-    // @audit - info - missing natspec
-    // audit - high - All the funds can be stolen if the flash loan is returned using deposit()
+    // @audit - [L-3] - Missing NatSpec Comments
+    // @audit - [H-2] - All the funds can be stolen if the flash loan is returned using deposit()
     function flashloan(
         address receiverAddress,
         IERC20 token,
@@ -241,8 +241,9 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         s_currentlyFlashLoaning[token] = false;
     }
 
-    // @audit - info - marked public but is not used internally, consider marking it as external
+    // @audit - [I-2] - Consider making `public` functions `external`.
     // @audit - low - you can't use repay to repay a flash loan inside another flash loan
+    // @audit - [L-3] - Missing NatSpec Comments
     function repay(IERC20 token, uint256 amount) public {
         if (!s_currentlyFlashLoaning[token]) {
             revert ThunderLoan__NotCurrentlyFlashLoaning();
@@ -251,7 +252,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         token.safeTransferFrom(msg.sender, address(assetToken), amount);
     }
 
-    // @audit - info - missing natspec
+    // @audit - [L-3] - Missing NatSpec Comments
     function setAllowedToken(IERC20 token, bool allowed) external onlyOwner returns (AssetToken) {
         if (allowed) {
             if (address(s_tokenToAssetToken[token]) != address(0)) {
@@ -271,7 +272,7 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         }
     }
 
-    // @audit - info - missing natspec
+    // @audit - [L-3] - Missing NatSpec Comments
     function getCalculatedFee(IERC20 token, uint256 amount) public view returns (uint256 fee) {
         //slither-disable-next-line divide-before-multiply
         // @audit - high - if the fee is going to be in the token, then the value should reflect that
@@ -292,12 +293,12 @@ contract ThunderLoan is Initializable, OwnableUpgradeable, UUPSUpgradeable, Orac
         return address(s_tokenToAssetToken[token]) != address(0);
     }
 
-    // @audit - info - marked public but is not used internally, consider marking it as external
+    // @audit - [I-2] - Consider making `public` functions `external`.
     function getAssetFromToken(IERC20 token) public view returns (AssetToken) {
         return s_tokenToAssetToken[token];
     }
 
-    // @audit - info - marked public but is not used internally, consider marking it as external
+    // @audit - [I-2] - Consider making `public` functions `external`.
     function isCurrentlyFlashLoaning(IERC20 token) public view returns (bool) {
         return s_currentlyFlashLoaning[token];
     }

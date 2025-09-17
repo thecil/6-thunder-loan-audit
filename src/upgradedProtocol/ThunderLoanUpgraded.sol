@@ -81,7 +81,7 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
     error ThunderLoan__NotEnoughTokenBalance(uint256 startingBalance, uint256 amount);
     error ThunderLoan__CallerIsNotContract();
     error ThunderLoan__AlreadyAllowed();
-    // @audit - low - Unused Error
+    // @audit - [L-1] - Unused Errors
     error ThunderLoan__ExhangeRateCanOnlyIncrease();
     error ThunderLoan__NotCurrentlyFlashLoaning();
     error ThunderLoan__BadNewFee();
@@ -145,6 +145,7 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
         s_flashLoanFee = 3e15; // 0.3% ETH fee
     }
 
+    // @audit - [L-3] - Missing NatSpec Comments
     function deposit(IERC20 token, uint256 amount) external revertIfZero(amount) revertIfNotAllowedToken(token) {
         AssetToken assetToken = s_tokenToAssetToken[token];
         uint256 exchangeRate = assetToken.getExchangeRate();
@@ -178,6 +179,7 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
         assetToken.transferUnderlyingTo(msg.sender, amountUnderlying);
     }
 
+    // @audit - [L-3] - Missing NatSpec Comments
     function flashloan(
         address receiverAddress,
         IERC20 token,
@@ -229,7 +231,8 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
         s_currentlyFlashLoaning[token] = false;
     }
 
-    // @audit - info - marked public but is not used internally, consider marking it as external
+    // @audit - [I-2] - Consider making `public` functions `external`.
+    // @audit - [L-3] - Missing NatSpec Comments
     function repay(IERC20 token, uint256 amount) public {
         if (!s_currentlyFlashLoaning[token]) {
             revert ThunderLoan__NotCurrentlyFlashLoaning();
@@ -238,6 +241,7 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
         token.safeTransferFrom(msg.sender, address(assetToken), amount);
     }
 
+    // @audit - [L-3] - Missing NatSpec Comments
     function setAllowedToken(IERC20 token, bool allowed) external onlyOwner returns (AssetToken) {
         if (allowed) {
             if (address(s_tokenToAssetToken[token]) != address(0)) {
@@ -257,6 +261,7 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
         }
     }
 
+    // @audit - [L-3] - Missing NatSpec Comments
     function getCalculatedFee(IERC20 token, uint256 amount) public view returns (uint256 fee) {
         //slither-disable-next-line divide-before-multiply
         uint256 valueOfBorrowedToken = (amount * getPriceInWeth(address(token))) / FEE_PRECISION;
@@ -276,12 +281,12 @@ contract ThunderLoanUpgraded is Initializable, OwnableUpgradeable, UUPSUpgradeab
         return address(s_tokenToAssetToken[token]) != address(0);
     }
 
-    // @audit - info - marked public but is not used internally, consider marking it as external
+    // @audit - [I-2] - Consider making `public` functions `external`.
     function getAssetFromToken(IERC20 token) public view returns (AssetToken) {
         return s_tokenToAssetToken[token];
     }
 
-    // @audit - info - marked public but is not used internally, consider marking it as external
+    // @audit - [I-2] - Consider making `public` functions `external`.
     function isCurrentlyFlashLoaning(IERC20 token) public view returns (bool) {
         return s_currentlyFlashLoaning[token];
     }

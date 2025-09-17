@@ -1,15 +1,3 @@
-| File                         | nSLOC | Complexity Score | audited |
-|------------------------------|-------|------------------|---------|
-| src/interfaces/ITSwapPool.sol  | 3     | 3                | checked |
-| src/interfaces/IThunderLoan.sol  | 3     | 3                | checked |
-| src/interfaces/IPoolFactory.sol  | 3     | 3                | checked |
-| src/interfaces/IFlashLoanReceiver.sol | 4    | 3                | checked |
-| src/protocol/OracleUpgradeable.sol | 23   | 18               | checked |
-| src/protocol/AssetToken.sol      | 65    | 41               | checked |
-| src/upgradedProtocol/ThunderLoanUpgraded.sol | 189  | 127              |
-| src/protocol/ThunderLoan.sol     | 193   | 129              |
-
-
 ## Findings
 
 ## HIGH
@@ -105,8 +93,60 @@ Check the unit test `ThunderLoanTest::test_useDepositInstedOfRepayToStealFunds` 
 
 **Recommended Mitigation**: Add a check in deposit() to make it impossible to use it in the same block of the flash loan. For example registring the block.number in a variable in flashloan() and checking it in deposit().
 
+### [H-3] - Storage Collision between `ThunderLoan` and `ThunderLoanUpgraded`.
 
+**Description**: The `ThunderLoanUpgraded` contract is a version of the `ThunderLoan` contract that has a different implementation of the storage slots.
 
+In `ThunderLoan` contract, the storage slot `2` contains the variable `s_feePrecision` which is used for calculating the fee. While in `ThunderLoanUpgraded` contract, the storage slot `2` contains the variable `s_flashLoanFee` which is used to calculate the flash loan fee.
+
+The `s_feePrecision` from the thunderloan.sol was changed to `uint256 constant FEE_PRECISION = 1e18`t variable which will no longer be assessed from the state variable.
+
+**Impact**: This will cause the location at which the upgraded version will be pointing to for some significant state variables like `s_flashLoanFee` to be wrong because `s_flashLoanFee` is now pointing to the slot of the `s_feePrecision` in the thunderloan.sol and when this fee is used to compute the fee for flashloan it will return a fee amount greater than the intention of the developer. `s_currentlyFlashLoaning` might not really be affected as it is back to default when a flashloan is completed but still to be noted that the value at that slot can be cleared to be on a safer side.
+
+**Proof of Concept**: (Proof of Code)
+
+This is the actual storage for each `ThunderLoan` and `ThunderLoanUpgraded` contract    
+
+Verify by executing the following commands for each
+
+```
+forge inspect ThunderLoan storage
+forge inspect ThunderLoanUpgraded storage
+```
+
+#### ThunderLoan storage:
+```
+╭-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------╮
+| Name                    | Type                                            | Slot | Offset | Bytes | Contract                                 |
++==============================================================================================================================================+
+| s_poolFactory           | address                                         | 0    | 0      | 20    | src/protocol/ThunderLoan.sol:ThunderLoan |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------|
+| s_tokenToAssetToken     | mapping(contract IERC20 => contract AssetToken) | 1    | 0      | 32    | src/protocol/ThunderLoan.sol:ThunderLoan |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------|
+| s_feePrecision          | uint256                                         | 2    | 0      | 32    | src/protocol/ThunderLoan.sol:ThunderLoan |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------|
+| s_flashLoanFee          | uint256                                         | 3    | 0      | 32    | src/protocol/ThunderLoan.sol:ThunderLoan |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------|
+| s_currentlyFlashLoaning | mapping(contract IERC20 => bool)                | 4    | 0      | 32    | src/protocol/ThunderLoan.sol:ThunderLoan |
+╰-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------╯
+```
+
+#### ThunderLoanUpgraded storage:
+```
+╭-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------------------------------╮
+| Name                    | Type                                            | Slot | Offset | Bytes | Contract                                                         |
++======================================================================================================================================================================+
+| s_poolFactory           | address                                         | 0    | 0      | 20    | src/upgradedProtocol/ThunderLoanUpgraded.sol:ThunderLoanUpgraded |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------------------------------|
+| s_tokenToAssetToken     | mapping(contract IERC20 => contract AssetToken) | 1    | 0      | 32    | src/upgradedProtocol/ThunderLoanUpgraded.sol:ThunderLoanUpgraded |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------------------------------|
+| s_flashLoanFee          | uint256                                         | 2    | 0      | 32    | src/upgradedProtocol/ThunderLoanUpgraded.sol:ThunderLoanUpgraded |
+|-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------------------------------|
+| s_currentlyFlashLoaning | mapping(contract IERC20 => bool)                | 3    | 0      | 32    | src/upgradedProtocol/ThunderLoanUpgraded.sol:ThunderLoanUpgraded |
+╰-------------------------+-------------------------------------------------+------+--------+-------+------------------------------------------------------------------╯
+```
+
+**Recommended Mitigation**: The team should should make sure the the fee is pointing to the correct location as intended by the developer.  
 
 ## MEDIUM
 
@@ -139,9 +179,166 @@ Check the unit test `ThunderLoanTest::test_oracleManipulation` as proof of code 
 
 ## LOW
 
+### [L-1] - Unused Errors
+
+**Description**: The `ThunderLoan` & `ThunderLoanUpgraded` contracts contains declared errors, yet no function ever reverts with them. Dead declarations bloat bytecode, increase deployment costs, and distract maintainers who must verify their relevance.
+
+**Impact**: Low.
+
+**Proof of Concept**: 
+
+The following contracts have unused errors:
+
+- `ThunderLoan` contains `ThunderLoan__ExhangeRateCanOnlyIncrease` unused error.
+- `ThunderLoanUpgraded` contains `ThunderLoan__ExhangeRateCanOnlyIncrease` unused error.
+
+**Recommended Mitigation**: We recommend either removing these errors if they are unnecessary, or using them in the appropriate places where the corresponding checks are relevant.
+
+### [L-2] - Initializer Can Be Front-Run to Gain Control of the Program
+
+**Description**: The `initialize` function in the `ThunderLoan` & `ThunderLoanUpgraded` contracts allows anyone to call it with any address as the `tswapAddress`. This could be exploited by an attacker to gain control of the program. The `msg.sender` should be restricted to only the contract owner or a trusted party.
+
+**Impact**: Low.
+
+**Proof of Concept**: 
+
+The actual codebase for the `initialize` function is as follows:
+
+```solidity
+    function initialize(address tswapAddress) external initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        __Oracle_init(tswapAddress);
+        s_feePrecision = 1e18;
+        s_flashLoanFee = 3e15; // 0.3% ETH fee
+    }
+```
+
+There is no verification on the `tswapAddress` and there is no restrictions on the `msg.sender`, which means that anyone can call this function and gain control of the program.
+
+**Recommended Mitigation**: 
+
+1. Make sure the deployment and initialization of the program occur in the same transaction.
+2. Add a modifier such as `onlyOwner` to restrict access to the `initialize` function. This will prevent unauthorized calls and ensure that only authorized parties can control the program.
+
+### [L-3] - Missing NatSpec Comments
+
+**Description**: All the contracts in the code-base are missing or have incomplete code documentation, which affects the understandability, auditability, and usability of the code. Solidity contracts can use a special form of comments to provide rich documentation for functions, return variables, parameters, etc. This special form is named the Ethereum Natural Language Specification Format (NatSpec).
+
+**Impact**: Understandability, auditability, and usability of the code are affected.
+
+**Proof of Concept**: 
+
+The following functions are missing NatSpec comments:
+
+- `ThunderLoan::deposit`.
+- `ThunderLoan::flashloan`.
+- `ThunderLoan::repay`.
+- `ThunderLoan::setAllowedToken`.
+- `ThunderLoan::getCalculatedFee`.
+- `ThunderLoanUpgraded::deposit`.
+- `ThunderLoanUpgraded::flashloan`.
+- `ThunderLoanUpgraded::repay`.
+- `ThunderLoanUpgraded::setAllowedToken`.
+- `ThunderLoanUpgraded::getCalculatedFee`.
+
+**Recommended Mitigation**: Consider adding in full NatSpec comments for all functions to have complete code documentation for future use.
+
 ## INFORMATIONAL
 
+### [I-1] - `ThunderLoan::initialize` function parameter `tswapAddress` should be renamed to `poolFactoryAddress` to match the name of the `OracleUpgradeable` contract.
+
+**Description**: The `initialize` function parameter `tswapAddress` should be renamed to `poolFactoryAddress` to match the name of the `OracleUpgradeable` contract. This change will make the contract more consistent with other contracts in the protocol.
+
+**Impact**: Low.
+
+**Proof of Concept**: 
+
+In `ThunderLoan.sol`:
+
+```solitidy
+    function initialize(address tswapAddress) external initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        __Oracle_init(tswapAddress);
+        s_feePrecision = 1e18;
+        s_flashLoanFee = 3e15; // 0.3% ETH fee
+    }
+```
+
+In `OracleUpgradeable.sol`:
+
+```solitidy
+    function __Oracle_init(address poolFactoryAddress) internal onlyInitializing {
+        __Oracle_init_unchained(poolFactoryAddress);
+    }
+```
+
+**Recommended Mitigation**: Rename the `tswapAddress` parameter to `poolFactoryAddress` in order to harmonize the variables names across the protocol.
+
+```diff
+-   function initialize(address tswapAddress) external initializer {
++   function initialize(address poolFactoryAddress) external initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+-       __Oracle_init(tswapAddress);
++       __Oracle_init(poolFactoryAddress);
+        s_feePrecision = 1e18;
+        s_flashLoanFee = 3e15; // 0.3% ETH fee
+    }
+```
+
+### [I-2] - Consider making `public` functions `external`.
+
+**Description**: Several functions in the `ThunderLoan` and `ThunderLoanUpgraded` contracts that are marked as public could be declared as external to save gas costs and improve performance. It is particularly relevant for functions that are not called internally within the contract.
+
+**Impact**: Low.
+
+**Proof of Concept**: 
+
+The following functions are public:
+
+- `ThunderLoan::repay`.
+- `ThunderLoan::getAssetFromToken`.
+- `ThunderLoan::isCurrentlyFlashLoaning`.
+- `ThunderLoanUpgraded::repay`.
+- `ThunderLoanUpgraded::getAssetFromToken`.
+- `ThunderLoanUpgraded::isCurrentlyFlashLoaning`.
+
+**Recommended Mitigation**: We recommend changing the visibility of the following functions from `public` to `external` where appropriate.
+
 ## GAS
+
+### [G-1] - `ThunderLoan::s_feePrecision` can be declared as constant or immutable
+
+**Description**: The `s_feePrecision` variable in the `ThunderLoan` contract is not designed to be modified after deployment, as no setter function exists. Keeping it mutable introduces unnecessary complexity, gas cost, and potential misuse.
+
+**Impact**: Low.
+
+**Proof of Concept**: 
+
+This is the actual implementation for the `ThunderLoan::s_feePrecision` variable:
+
+In `ThunderLoan.sol`:
+
+```solitidy
+    uint256 private s_feePrecision;
+
+    function initialize(address tswapAddress) external initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        __Oracle_init(tswapAddress);
+        s_feePrecision = 1e18;
+        s_flashLoanFee = 3e15; // 0.3% ETH fee
+    }
+```
+The variable is set to `1e18`, which is a common precision for financial calculations. This value can be used throughout the contract without needing to change it.
+
+There is no setter function for `s_feePrecision`, which means it cannot be changed after the initialization.
+
+**Recommended Mitigation**: Consider marking `s_feePrecision` as constant or immutable to enforce immutability and improve gas efficiency.
+
+PD: 
 
 ### [I-1] - 
 
